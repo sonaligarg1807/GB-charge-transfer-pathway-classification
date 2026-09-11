@@ -5,7 +5,7 @@ primary transport archetypes, from time-resolved electronic coupling data,
 and includes convergence/reliability checks for that classification.
 
 For each sampled pathway (a chain of sites/dimers from a source to a target
-electrode or region, crossing a grain boundary), the pipeline computes a
+region, crossing a grain boundary), the pipeline computes a
 per-dimer *effective link* `E_i = J_i * C_i` (time-averaged coupling `J_i`
 weighted by a coherence measure `C_i`), builds symmetric and order-aware
 descriptors from the resulting profile, and classifies each pathway into one
