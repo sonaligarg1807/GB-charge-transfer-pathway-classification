@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gbctp"
+version = "0.1.0"
+description = "Classification of charge-transfer pathways across a grain boundary from time-resolved electronic coupling data"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+]
+
+[project.optional-dependencies]
+notebooks = ["matplotlib", "seaborn", "jupyter"]
+geometry = ["MDAnalysis"]
+
+[tool.setuptools.packages.find]
+include = ["gbctp*"]

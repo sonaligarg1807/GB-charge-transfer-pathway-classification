@@ -1,64 +1,58 @@
-# GB Charge-Transfer Pathway Classification
+# gbctp: GB Charge-Transfer Pathway Classification
 
-Classification of charge-transfer pathways across a grain boundary (GB) into
-primary transport archetypes, based on an *effective link descriptor*
-computed from time-resolved electronic coupling data, plus a convergence and
-robustness analysis of that classification.
-
-This code was used to classify sampled charge-transfer pathways in a
-bicrystal grain-boundary system and to verify that the resulting
-classification is stable with respect to the number of sampled pathways and
-to the exact thresholds used to define the classes.
-
-## Method summary
+Classifies charge-transfer pathways across a grain boundary (GB) into
+primary transport archetypes, from time-resolved electronic coupling data,
+and includes convergence/reliability checks for that classification.
 
 For each sampled pathway (a chain of sites/dimers from a source to a target
-electrode or region, crossing a grain boundary), the pipeline:
+electrode or region, crossing a grain boundary), the pipeline computes a
+per-dimer *effective link* `E_i = J_i * C_i` (time-averaged coupling `J_i`
+weighted by a coherence measure `C_i`), builds symmetric and order-aware
+descriptors from the resulting profile, and classifies each pathway into one
+of four primary labels: `Source-limited`, `Target-limited`,
+`GB-crossing (recovering)`, `GB-blocked (non-recovering)` (with an optional
+fifth `Diffuse/weakly structured` bucket).
 
-1. Reads a time series of pairwise electronic couplings along the path.
-2. Computes, per dimer `i`, the time-averaged absolute coupling `J_i`, a
-   coherence measure `C_i = <|T_i|>^2 / <|T_i|^2>`, and the **effective
-   link** `E_i = J_i * C_i`.
-3. Builds two families of descriptors from the `E_i` (and `J_i`, `C_i`)
-   profile along the path:
-   - **Symmetric (order-independent)** descriptors — permutation-invariant
-     summary statistics of the coupling/coherence distribution.
-   - **Non-symmetric (order-aware)** descriptors — bottleneck position,
-     bottleneck depth, early/late recovery ratio, mid-path "dip" relative to
-     the path ends, and weak-region width, all computed respecting the
-     source → target ordering.
-4. Uses the order-aware descriptors to assign four secondary label axes
-   (`location`, `cause`, `shape`, `recovery`), then merges these into one of
-   **four primary labels**:
-   - `Source-limited`
-   - `Target-limited`
-   - `GB-crossing (recovering)`
-   - `GB-blocked (non-recovering)`
+## Installation
 
-   (an optional fifth `Diffuse/weakly structured` bucket can be enabled for
-   pathways with no clear structure).
-5. Selects representative ("medoid") pathways per primary label for
-   downstream dynamics/visualization.
-
-The convergence and reliability notebooks then re-run this classification
-under repeated random subsampling and threshold perturbation to check that
-the primary-label populations are not an artifact of the sample size or the
-exact quantile cutoffs chosen.
+```
+pip install -e .            # core package (numpy, pandas, scikit-learn)
+pip install -e ".[notebooks]"  # + matplotlib, seaborn, jupyter, for the notebooks
+pip install -e ".[geometry]"   # + MDAnalysis, for the optional 3D bottleneck plot
+```
 
 ## Repository layout
 
 ```
-notebooks/
-  01_pathway_classification.ipynb   Main pipeline: descriptors -> primary labels -> representative paths
-  02_convergence_and_robustness.ipynb  Subsampling convergence, threshold convergence/sensitivity, bootstrap uncertainty
-  03_reliability_heatmaps.ipynb        Label-retention heat maps under bootstrap sampling (+ threshold perturbation)
-requirements.txt
+gbctp/                       Installable package -- all computation lives here
+  io.py                      Reading per-pathway coupling CSVs
+  descriptors.py             Per-dimer J/C/E metrics + symmetric/order-aware descriptors
+  labeling.py                Threshold computation, archetype labels, primary-label merging
+  representatives.py         Representative ("medoid") pathway selection
+  pipeline.py                End-to-end classification pipeline (PipelineConfig, run_pipeline)
+  reliability.py             Subsampling convergence, threshold sensitivity, bootstrap heat maps
+  geometry.py                Optional .gro geometry loading (needs MDAnalysis)
+
+scripts/                     CLI wrappers around gbctp, for non-interactive/batch use
+  run_classification.py      Runs gbctp.pipeline end to end
+  run_convergence.py         Runs the convergence/sensitivity checks in gbctp.reliability
+  run_reliability_heatmaps.py  Runs the bootstrap/threshold-perturbation heat-map checks
+
+notebooks/                   Plotting only -- import gbctp, configure inputs, visualize
+  01_pathway_classification.ipynb
+  02_convergence_and_robustness.ipynb
+  03_reliability_heatmaps.ipynb
 ```
+
+Use the package/scripts directly for batch runs or your own analysis code;
+use the notebooks when you want the figures. Every function has a docstring
+describing its inputs/outputs -- start from `gbctp/pipeline.py` and
+`gbctp/reliability.py` for the two entry points.
 
 ## Input data
 
-Not included in this repository. Each notebook expects one CSV file per
-sampled pathway with the format:
+Not included in this repository. Each pathway is one CSV with the format
+(see `gbctp/io.py:read_path_csv`):
 
 ```
 sites,1276,1834,...
@@ -68,74 +62,57 @@ time,"cpl(1,2)","cpl(2,3)",...
 ...
 ```
 
-- Row 1: `sites` followed by the site IDs along the path (length `n`).
+- Row 1: `sites` followed by the site IDs along the path, source -> target
+  (length `n`).
 - Row 2: column header, `time` plus one `cpl(i,i+1)` column per dimer
   (`n - 1` columns).
-- Remaining rows: the coupling time series.
+- Remaining rows: the coupling time series (signed, arbitrary units).
 
-By default the notebooks look for these files under
-`ROOT_DIR.glob("*/TRAJ1/path_couplings_timeseries.csv")` — update `ROOT_DIR`
-(and `CSV_PATTERN` if needed) in the configuration cell of each notebook to
-point at your own data.
+A `root_dir` / `csv_pattern` pair (e.g.
+`"*/TRAJ1/path_couplings_timeseries.csv"`) locates one such file per
+pathway; see the `TODO` placeholders in `PipelineConfig` / the notebooks'
+configuration cells.
+
+## Usage
+
+Python:
+
+```python
+from pathlib import Path
+from gbctp.pipeline import PipelineConfig, run_pipeline
+
+config = PipelineConfig(
+    root_dir=Path("/path/to/pathway_csvs"),
+    output_dir=Path("/path/to/outputs"),
+    csv_pattern="*/TRAJ1/path_couplings_timeseries.csv",
+)
+result = run_pipeline(config)
+print(result.summary_primary)
+```
+
+CLI:
+
+```
+python scripts/run_classification.py --root-dir /path/to/pathway_csvs --output-dir /path/to/outputs
+python scripts/run_convergence.py --order-descriptor-file /path/to/outputs/paths_order_descriptors_with_archetype_labels.csv --output-dir /path/to/outputs/figures
+python scripts/run_reliability_heatmaps.py --order-descriptor-file /path/to/outputs/paths_order_descriptors_with_archetype_labels.csv --output-dir /path/to/outputs/results
+```
+
+Then open the notebooks, set the input paths in their configuration cell,
+and run top to bottom for the figures.
 
 ## Running order
 
-1. **`01_pathway_classification.ipynb`** — set `ROOT_DIR` to the directory
-   containing your per-pathway coupling CSVs and `OUTPUT_DIR` for the
-   results, then run top to bottom. This produces (among other files)
-   `paths_order_descriptors_with_archetype_labels.csv` and
-   `paths_with_primary_labels.csv`, which are the inputs to the other two
-   notebooks.
-2. **`02_convergence_and_robustness.ipynb`** — point `ROOT_DIR` /
-   `ORDER_DESCRIPTOR_FILE` / `PRIMARY_LABEL_FILE` at the outputs from step 1.
-   Produces class-fingerprint plots, subsampling-convergence plots (main
-   text) and threshold-convergence / bootstrap-uncertainty / threshold-
-   sensitivity plots (SI).
-3. **`03_reliability_heatmaps.ipynb`** — point `ORDER_DESCRIPTOR_FILE` at the
-   same file. Produces the two label-retention heat maps described below.
+1. `01_pathway_classification.ipynb` (or `run_classification.py`) reads the
+   pathway CSVs and produces `paths_order_descriptors_with_archetype_labels.csv`
+   and `paths_with_primary_labels.csv`, which are the inputs to the other two.
+2. `02_convergence_and_robustness.ipynb` (or `run_convergence.py`) checks
+   convergence of class fractions and thresholds with sample size, and
+   sensitivity to the exact quantile cutoffs.
+3. `03_reliability_heatmaps.ipynb` (or `run_reliability_heatmaps.py`)
+   produces label-retention heat maps under bootstrap sampling (+ optional
+   threshold perturbation).
 
-All three notebooks have a single "configuration" cell near the top where
-paths and analysis parameters (bootstrap counts, quantile thresholds, random
-seed, etc.) are set.
+## License
 
-## Convergence and robustness checks
-
-`02_convergence_and_robustness.ipynb` and `03_reliability_heatmaps.ipynb`
-both test whether the primary classification depends on how many pathways
-were sampled, or on the exact quantile thresholds used to define the
-classes, by repeated random subsampling and (in notebook 3, part B)
-perturbation of the quantile levels themselves.
-
-For a primary class `c`, the reported **label-retention fraction** at
-sample size `n` is
-
-$$
-S_{n,c} = \frac{1}{BP N_c} \sum_{b=1}^{B} \sum_{p=1}^{P} \sum_{k \in c}
-\mathbf{1}\!\left[ L_k^{(b,p,n)} = L_k^{\mathrm{ref}} \right]
-$$
-
-where `L_k^ref` is pathway `k`'s primary label from the full-dataset
-reference classification, `L_k^(b,p,n)` its label after bootstrap repeat `b`
-(and, where applicable, threshold-perturbation repeat `p`) using only `n`
-pathways to define the thresholds, `B`/`P` are the number of bootstrap /
-perturbation repeats, and `N_c` is the number of pathways in reference class
-`c`. A value close to 1 means that class's membership is essentially
-unaffected by finite sampling (and, for the combined test, by the exact
-threshold definitions).
-
-In the dataset this pipeline was developed against, all four primary
-classes reached retention fractions above ~0.87 even when thresholds were
-estimated from only 10% of the sampled pathways, and converged toward 1.0
-as the sampled fraction increased — i.e. the classification is not an
-artifact of sample size or of the specific quantile cutoffs chosen.
-
-## Requirements
-
-```
-pip install -r requirements.txt
-```
-
-The optional 3D bottleneck-visualization cell at the end of
-`01_pathway_classification.ipynb` additionally requires
-[MDAnalysis](https://www.mdanalysis.org/) and a `.gro` geometry file; it is
-skipped gracefully if either is unavailable.
+MIT, see [LICENSE](LICENSE).

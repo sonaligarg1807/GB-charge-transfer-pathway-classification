@@ -1,6 +1,9 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
 
 # Local run outputs (not tracked -- notebooks write here by default)
 example_data/
