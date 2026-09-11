@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Local run outputs (not tracked -- notebooks write here by default)
+example_data/
+results/
+*.csv
+*.png
+*.pdf
+
+.DS_Store
