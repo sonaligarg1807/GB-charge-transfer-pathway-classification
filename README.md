@@ -34,6 +34,7 @@ gbctp/                       Installable package -- all computation lives here
   geometry.py                Optional .gro geometry loading (needs MDAnalysis)
 
 scripts/                     CLI wrappers around gbctp, for non-interactive/batch use
+  generate_coupling_csvs.py  Builds the input: one coupling time series CSV per pathway
   run_classification.py      Runs gbctp.pipeline end to end
   run_convergence.py         Runs the convergence/sensitivity checks in gbctp.reliability
   run_reliability_heatmaps.py  Runs the bootstrap/threshold-perturbation heat-map checks
@@ -68,6 +69,11 @@ time,"cpl(1,2)","cpl(2,3)",...
   (`n - 1` columns).
 - Remaining rows: the coupling time series (signed, arbitrary units).
 
+These files are written by `scripts/generate_coupling_csvs.py` from the
+tight-binding output of each pathway (`charge-transfer.dat` and
+`TB_HAMILTONIAN.xvg` in `<base_dir>/subdir_*/TRAJ1/`); see that script's
+docstring for details.
+
 A `root_dir` / `csv_pattern` pair (e.g.
 `"*/TRAJ1/path_couplings_timeseries.csv"`) locates one such file per
 pathway; see the `TODO` placeholders in `PipelineConfig` / the notebooks'
@@ -93,6 +99,7 @@ print(result.summary_primary)
 CLI:
 
 ```
+python scripts/generate_coupling_csvs.py /path/to/pathway_csvs
 python scripts/run_classification.py --root-dir /path/to/pathway_csvs --output-dir /path/to/outputs
 python scripts/run_convergence.py --order-descriptor-file /path/to/outputs/paths_order_descriptors_with_archetype_labels.csv --output-dir /path/to/outputs/figures
 python scripts/run_reliability_heatmaps.py --order-descriptor-file /path/to/outputs/paths_order_descriptors_with_archetype_labels.csv --output-dir /path/to/outputs/results
@@ -103,6 +110,9 @@ and run top to bottom for the figures.
 
 ## Running order
 
+0. `generate_coupling_csvs.py` extracts the coupling time series of every
+   sampled pathway from its tight-binding output and writes one
+   `path_couplings_timeseries.csv` per pathway (the input of step 1).
 1. `01_pathway_classification.ipynb` (or `run_classification.py`) reads the
    pathway CSVs and produces `paths_order_descriptors_with_archetype_labels.csv`
    and `paths_with_primary_labels.csv`, which are the inputs to the other two.
